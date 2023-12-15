@@ -19,6 +19,8 @@ import (
 	"github.com/huangzhexi/oauth2/models"
 	"github.com/huangzhexi/oauth2/server"
 	"github.com/huangzhexi/oauth2/store"
+	"github.com/huangzhexi/oauth2/validates"
+
 	//"validates"
 	"github.com/go-session/session"
 )
