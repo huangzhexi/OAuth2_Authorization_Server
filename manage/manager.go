@@ -2,7 +2,7 @@ package manage
 
 import (
 	"context"
-	"github.com/huangzhexi/oauth2/example/server/static"
+	"github.com/huangzhexi/oauth2"
 	"time"
 
 	"github.com/huangzhexi/oauth2/errors"
@@ -14,7 +14,7 @@ import (
 func NewDefaultManager() *Manager {
 	m := NewManager()
 	// default implementation
-	m.MapAuthorizeGenerate(static.NewAuthorizeGenerate())
+	m.MapAuthorizeGenerate(generates.NewAuthorizeGenerate())
 	m.MapAccessGenerate(generates.NewAccessGenerate())
 
 	return m
