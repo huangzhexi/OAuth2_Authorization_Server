@@ -1,6 +1,7 @@
 package server
 
 import (
+	"github.com/huangzhexi/oauth2"
 	"net/http"
 	"time"
 )

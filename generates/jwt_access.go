@@ -3,6 +3,7 @@ package generates
 import (
 	"context"
 	"encoding/base64"
+	"github.com/huangzhexi/oauth2"
 	"strings"
 	"time"
 

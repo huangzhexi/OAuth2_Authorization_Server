@@ -1,5 +1,7 @@
 package server
 
+import "github.com/huangzhexi/oauth2"
+
 // SetTokenType token type
 func (s *Server) SetTokenType(tokenType string) {
 	s.Config.TokenType = tokenType

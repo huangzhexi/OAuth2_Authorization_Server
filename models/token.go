@@ -1,6 +1,7 @@
 package models
 
 import (
+	"github.com/huangzhexi/oauth2"
 	"time"
 )
 

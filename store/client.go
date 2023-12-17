@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"github.com/huangzhexi/oauth2"
 	"sync"
 )
 

@@ -109,20 +109,16 @@ func main() {
 	http.HandleFunc("/auth", authHandler)
 	http.HandleFunc("/main", mainHandler)
 	http.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
+		if dumpvar {
+			dumpRequest(os.Stdout, "/", request)
+		}
 		writer.Header().Set("Location", "/login")
 		writer.WriteHeader(302)
 	})
-	http.HandleFunc("/oauth/authorize", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/authorize", func(w http.ResponseWriter, r *http.Request) {
 		if dumpvar {
 			dumpRequest(os.Stdout, "authorize", r)
 		}
-
-		//w.Header().Set("Access-Control-Allow-Origin", allowOrigin)
-		//// Allow methods
-		//w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
-		//// Allow headers
-		//w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
-
 		store, err := session.Start(r.Context(), w, r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -132,6 +128,9 @@ func main() {
 		var form url.Values
 		if v, ok := store.Get("ReturnUri"); ok {
 			form = v.(url.Values)
+			if dumpvar {
+				fmt.Println(store)
+			}
 		}
 		r.Form = form
 
@@ -140,10 +139,58 @@ func main() {
 
 		err = srv.HandleAuthorizeRequest(w, r)
 		if err != nil {
+			fmt.Println(err.Error())
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+		uri := w.Header().Get("Location")
+		fmt.Println("uri: " + uri)
+		if uri != "/login" {
+			var data map[string]string
+			data["Location"] = uri
+			w.WriteHeader(200)
+			e := json.NewEncoder(w)
+			e.SetIndent("", "  ")
+			e.Encode(data)
+		}
+	})
+	http.HandleFunc("/oauth/authorize", func(w http.ResponseWriter, r *http.Request) {
+		if dumpvar {
+			dumpRequest(os.Stdout, "authorize", r)
+		}
+		store, err := session.Start(r.Context(), w, r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		var form url.Values
+		if v, ok := store.Get("ReturnUri"); ok {
+			form = v.(url.Values)
+			if dumpvar {
+				fmt.Println(store)
+			}
+		}
+		r.Form = form
+
+		store.Delete("ReturnUri")
+		store.Save()
+
+		err = srv.HandleAuthorizeRequest(w, r)
+		if err != nil {
+			fmt.Println(err.Error())
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		}
 	})
+	http.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
+		if dumpvar {
+			_ = dumpRequest(os.Stdout, "token", r) // Ignore the error
+		}
 
+		err := srv.HandleTokenRequest(w, r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
 	http.HandleFunc("/oauth/token", func(w http.ResponseWriter, r *http.Request) {
 		if dumpvar {
 			_ = dumpRequest(os.Stdout, "token", r) // Ignore the error
@@ -227,16 +274,16 @@ func main() {
 		if dumpvar {
 			_ = dumpRequest(os.Stdout, "login", r) // Ignore the error
 		}
-		if r.Method != "POST" {
-			w.WriteHeader(404)
-		}
-		store, err := session.Start(r.Context(), w, r)
+		//if r.Method != "POST" {
+		//	w.WriteHeader(404)
+		//}
+		sStore, err := session.Start(r.Context(), w, r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		if _, ok := store.Get("LoggedInUserID"); ok {
+		if _, ok := sStore.Get("LoggedInUserID"); ok {
 			w.Header().Set("Location", "/main")
 
 			w.WriteHeader(http.StatusFound)
@@ -262,10 +309,8 @@ func main() {
 			http.Error(w, "StatusBadRequest", http.StatusBadRequest)
 		}
 		if !(validatePassword(userdb, formdata.Username, formdata.Password)) {
-			//outputHTML(w, r, "static/index.html")
+			fmt.Println("fail to login")
 			w.WriteHeader(404)
-			//w.Write()
-			//w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 		//if !(validatePassword(r.Form.Get("username"), r.Form.Get("password"))) {
@@ -275,10 +320,13 @@ func main() {
 		//	//w.WriteHeader(http.StatusUnauthorized)
 		//	return
 		//}
-		store.Set("LoggedInUserID", r.Form.Get("username"))
-		store.Save()
+		sStore.Set("LoggedInUserID", formdata.Username)
+		err = sStore.Save()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
 
-		//if _, ok := store.Get("ReturnUri"); !ok {
+		//if _, ok := sStore.Get("ReturnUri"); !ok {
 		//	w.Header().Set("Location", "/main")
 		//	w.WriteHeader(http.StatusFound)
 		//	return
@@ -317,6 +365,7 @@ func userAuthorizeHandler(w http.ResponseWriter, r *http.Request) (userID string
 	if dumpvar {
 		_ = dumpRequest(os.Stdout, "userAuthorizeHandler", r) // Ignore the error
 	}
+
 	store, err := session.Start(r.Context(), w, r)
 	if err != nil {
 		return
@@ -335,11 +384,12 @@ func userAuthorizeHandler(w http.ResponseWriter, r *http.Request) (userID string
 		w.WriteHeader(http.StatusFound)
 		return
 	}
-
+	fmt.Println("here2")
 	userID = uid.(string)
+	fmt.Println(userID)
 	//store.Delete("LoggedInUserID")
 	//store.Save()
-	return
+	return userID, nil
 }
 
 func loginHandler(w http.ResponseWriter, r *http.Request) {
@@ -400,8 +450,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	//	//	//w.WriteHeader(http.StatusUnauthorized)
 	//	//	return
 	//	//}
-	//	store.Set("LoggedInUserID", r.Form.Get("username"))
-	//	store.Save()
+
 	//
 	//	//if _, ok := store.Get("ReturnUri"); !ok {
 	//	//	w.Header().Set("Location", "/main")

@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"fmt"
+	"github.com/huangzhexi/oauth2/errors"
 	_ "github.com/lib/pq"
 	"golang.org/x/crypto/argon2"
 	"log"
@@ -28,6 +29,10 @@ type UserStore struct {
 	db             *sql.DB
 	//dbName 	   string
 }
+
+var (
+	ErrPasswordIncorrect = errors.New("Password is incorrect")
+)
 
 func NewUserStore(hostName string, dbUsername string, dbPassword string) *UserStore {
 	u := &UserStore{hostName: hostName, dbUsername: dbUsername, dbPassword: dbPassword}
@@ -87,6 +92,28 @@ func ComparePasswords(byteHashedPassword []byte, password, salt string) bool {
 	return subtle.ConstantTimeCompare(byteHashedPassword, derivedKey) == 1
 }
 
+//func (u *UserStore) ModifyUserName(username string, password string, userNameString string) {
+//
+//}
+
+func (u *UserStore) ModifyPassword(username string, password string, newPassword string) error {
+	if !u.Validates(username, password) {
+		return ErrPasswordIncorrect
+	}
+	salt, err := generateRandomString(u.saltSize)
+	if err != nil {
+		return err
+	}
+	hashPassword, err := HashPassword(password, salt)
+	if err != nil {
+		return err
+	}
+	_, err = u.db.Query("UPDATE \"oauthUser\" SET password=$1 salt=$2 WHERE username=$3", hashPassword, salt, username)
+	if err != nil {
+		return err
+	}
+	return nil
+}
 func (u *UserStore) Validates(username string, password string) bool {
 	//rows, err := u.db.Query(fmt.Sprintf("SELECT * FROM TABLE ( %s ) WHERE username = %s", u.dbTableName, username))
 	rows, err := u.db.Query("SELECT * FROM \"oauthUser\" WHERE username= $1", username)
@@ -95,11 +122,15 @@ func (u *UserStore) Validates(username string, password string) bool {
 		log.Fatal(err)
 		return false
 	}
+
 	//defer rows.Close()
-	rows.Next()
+	if !rows.Next() {
+		return false
+	}
 	var hashPassword string
 	var salt string
-	if err := rows.Scan(&username, &hashPassword, &salt); err != nil {
+	var name string
+	if err := rows.Scan(&username, &hashPassword, &salt, &name); err != nil {
 		log.Fatal(err)
 		return false
 	}
@@ -121,20 +152,11 @@ func (u *UserStore) Store(username string, password string, nameStr ...string) e
 	if err != nil {
 		return err
 	}
-	//fmt.Println(len(hashPassword))
-	//fmt.Println(hashPassword)
-	//tableName := u.dbTableName
 	fmt.Println(len(hashPassword))
 	_, err = u.db.Exec("INSERT INTO \"oauthUser\"(username, password, salt, namestring) VALUES($1, $2, $3, $4)",
 		username, hashPassword, salt, nameStr)
 	if err != nil {
 		return err
 	}
-	//defer func(db *sql.DB) {
-	//	err := db.Close()
-	//	if err != nil {
-	//		return
-	//	}
-	//}(u.db)
 	return nil
 }

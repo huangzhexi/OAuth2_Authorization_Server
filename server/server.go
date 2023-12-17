@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/huangzhexi/oauth2"
 	"net/http"
 	"net/url"
 	"strings"
@@ -81,7 +82,9 @@ func (s *Server) redirect(w http.ResponseWriter, req *AuthorizeRequest, data map
 	if err != nil {
 		return err
 	}
-
+	if true {
+		fmt.Println("redirect to: " + uri)
+	}
 	w.Header().Set("Location", uri)
 	w.WriteHeader(302)
 	return nil
@@ -170,6 +173,8 @@ func (s *Server) ValidationAuthorizeRequest(r *http.Request) (*AuthorizeRequest,
 	clientID := r.FormValue("client_id")
 	if !(r.Method == "GET" || r.Method == "POST") ||
 		clientID == "" {
+		fmt.Println("clientid:" + clientID)
+
 		return nil, errors.ErrInvalidRequest
 	}
 
@@ -276,6 +281,7 @@ func (s *Server) HandleAuthorizeRequest(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		return s.handleError(w, req, err)
 	} else if userID == "" {
+		fmt.Println("U:" + userID)
 		return nil
 	}
 	req.UserID = userID
