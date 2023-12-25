@@ -1,63 +1,92 @@
-package validates
+package store
 
 import (
 	"crypto/rand"
 	"crypto/subtle"
 	"database/sql"
 	"encoding/base64"
+	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/huangzhexi/oauth2/errors"
+	"io"
+	//"io/ioutil"
+	"log"
+	"os"
+
 	_ "github.com/lib/pq"
 	"golang.org/x/crypto/argon2"
-	"log"
 )
-
-// var (
-//
-//	Err
-//
-// )
-
-type UserStore struct {
-	hostName       string
-	dbUsername     string
-	dbPassword     string
-	dbDatabaseName string
-	dbTableName    string
-	dbSSLmode      string
-	saltSize       int
-	db             *sql.DB
-	//dbName 	   string
-}
 
 var (
-	ErrPasswordIncorrect = errors.New("Password is incorrect")
+	ErrFileHandleError      = errors.New("file Parser Error")
+	ErrPasswordIncorrect    = errors.New("password is incorrect")
+	ErrSqlCannotEstablished = errors.New("sql cannot established")
 )
 
-func NewUserStore(hostName string, dbUsername string, dbPassword string) *UserStore {
-	u := &UserStore{hostName: hostName, dbUsername: dbUsername, dbPassword: dbPassword}
-	u.dbSSLmode = "require"
-	u.dbDatabaseName = "oauth"
-	u.dbTableName = "oauthUser"
-	u.saltSize = 16
+type AuthUserStore struct {
+	saltSize int
+	db       *sql.DB
+}
+type UserConfFile struct {
+	Name           string `json:"name,omitempty"`
+	HostName       string `json:"hostName,omitempty"`
+	DbUsername     string `json:"dbUsername,omitempty"`
+	DbPassword     string `json:"dbPassword,omitempty"`
+	DbDatabaseName string `json:"dbDatabaseName,omitempty"`
+	DbTableName    string `json:"dbTableName,omitempty"`
+	DbSSLmode      string `json:"dbSSLmode,omitempty"`
+}
 
+func NewDefaultAuthUserStore(path string) (u *AuthUserStore, e error) {
+	if path == "" {
+		path = "user.json"
+	}
+	jsonFile, err := os.Open(path)
+	if err != nil {
+		fmt.Println(err)
+	}
+	defer jsonFile.Close()
+
+	byteValue, _ := io.ReadAll(jsonFile)
+
+	var data UserConfFile
+	err = json.Unmarshal(byteValue, &data)
+	if err != nil {
+		return nil, ErrFileHandleError
+	}
 	connStr := fmt.Sprintf("host= %s user=%s password=%s dbname=%s sslmode=%s",
-		u.hostName, u.dbUsername, u.dbPassword, u.dbDatabaseName, u.dbSSLmode)
-	//connStr := "user= password= dbname= sslmode=require"
+		data.HostName, data.DbUsername, data.DbPassword, data.DbDatabaseName, data.DbSSLmode)
+	fmt.Println(connStr)
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
 		log.Fatal(err)
-		return nil
+		return nil, err
 	}
+	if db == nil {
+		return nil, ErrSqlCannotEstablished
+	}
+	u = &AuthUserStore{}
 	u.db = db
-	//defer func(db *sql.DB) {
-	//	err := db.Close()
-	//	if err != nil {
-	//		log.Fatal(err)
-	//	}
-	//}(db)
-	return u
+	return u, nil
 }
+
+//func NewAuthUserStore(hostName, dbUsername, dbPassword, dbDatabaseName, dbSSLMode string) (u *AuthUserStore) {
+//	u.dbSSLmode = "require"
+//	u.dbDatabaseName = "oauth"
+//	u.dbTableName = "oauthUser"
+//	u.saltSize = 16
+//
+//	connStr := fmt.Sprintf("host= %s user=%s password=%s dbname=%s sslmode=%s",
+//		hostName, dbUsername, dbPassword, dbDatabaseName, dbSSLMode)
+//	//connStr := "user= password= dbname= sslmode=require"
+//	db, err := sql.Open("postgres", connStr)
+//	if err != nil {
+//		log.Fatal(err)
+//		return nil
+//	}
+//	u.db = db
+//	return u
+//}
 
 func generateRandomString(n int) (string, error) {
 	const letters = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-"
@@ -96,7 +125,7 @@ func ComparePasswords(byteHashedPassword []byte, password, salt string) bool {
 //
 //}
 
-func (u *UserStore) ModifyPassword(username string, password string, newPassword string) error {
+func (u *AuthUserStore) ModifyPassword(username string, password string, newPassword string) error {
 	_, isCorrect, err := u.Validates(username, password)
 	if err != nil {
 		return err
@@ -118,7 +147,7 @@ func (u *UserStore) ModifyPassword(username string, password string, newPassword
 	}
 	return nil
 }
-func (u *UserStore) Validates(username string, password string) (string, bool, error) {
+func (u *AuthUserStore) Validates(username string, password string) (string, bool, error) {
 	//rows, err := u.db.Query(fmt.Sprintf("SELECT * FROM TABLE ( %s ) WHERE username = %s", u.dbTableName, username))
 	rows, err := u.db.Query("SELECT * FROM \"oauthUser\" WHERE username= $1", username)
 
@@ -151,7 +180,7 @@ func (u *UserStore) Validates(username string, password string) (string, bool, e
 	//return false
 }
 
-func (u *UserStore) Store(username string, password string, nameStr ...string) error {
+func (u *AuthUserStore) Store(username string, password string, nameStr ...string) error {
 	salt, err := generateRandomString(u.saltSize)
 	if err != nil {
 		return err

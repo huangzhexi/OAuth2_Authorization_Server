@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/huangzhexi/oauth2"
 	"github.com/huangzhexi/oauth2/models"
 	"github.com/huangzhexi/oauth2/store"
-
 	. "github.com/smartystreets/goconvey/convey"
 )
 

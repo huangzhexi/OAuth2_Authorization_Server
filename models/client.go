@@ -29,7 +29,7 @@ func (c *Client) IsPublic() bool {
 	return c.Public
 }
 
-// GetUserID user id
+// GetUserID User id
 func (c *Client) GetUserID() string {
 	return c.UserID
 }
