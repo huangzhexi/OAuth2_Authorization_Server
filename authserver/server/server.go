@@ -19,8 +19,6 @@ import (
 	"github.com/huangzhexi/oauth2/models"
 	"github.com/huangzhexi/oauth2/server"
 	"github.com/huangzhexi/oauth2/store"
-	"github.com/huangzhexi/oauth2/validates"
-
 	//"validates"
 	"github.com/go-session/session"
 )
@@ -60,7 +58,11 @@ func main() {
 	if dumpvar {
 		log.Println("Dumping requests")
 	}
-	userdb := validates.NewUserStore(userValidateDBAddr, userValidateDBName, userValidateDBPassword)
+	//userdb := validates.NewUserStore(userValidateDBAddr, userValidateDBName, userValidateDBPassword)
+	userStore, err := store.NewDefaultAuthUserStore("user.json")
+	if err != nil {
+		fmt.Println(err)
+	}
 	//var allowOrigin string = "http://localhost:3000"
 	manager := manage.NewDefaultManager()
 	manager.SetAuthorizeCodeTokenCfg(manage.DefaultAuthorizeCodeTokenCfg)
@@ -291,12 +293,12 @@ func main() {
 		if err != nil {
 			http.Error(w, "StatusBadRequest", http.StatusBadRequest)
 		}
-		if !(validatePassword(userdb, formdata.Username, formdata.Password)) {
+		if !(validatePassword(userStore, formdata.Username, formdata.Password)) {
 			fmt.Println("password validation failed")
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		err = userdb.ModifyPassword(formdata.Username, formdata.Password, formdata.NewPassword)
+		err = userStore.ModifyPassword(formdata.Username, formdata.Password, formdata.NewPassword)
 		if err != nil {
 			//w.WriteHeader(http.StatusInternalServerError)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -374,7 +376,7 @@ func main() {
 			http.Error(w, "StatusBadRequest", http.StatusBadRequest)
 			return
 		}
-		usernameString, isCorrect, err := userdb.Validates(formdata.Username, formdata.Password)
+		usernameString, isCorrect, err := userStore.Validates(formdata.Username, formdata.Password)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -469,82 +471,6 @@ func userAuthorizeHandler(w http.ResponseWriter, r *http.Request) (userID string
 	return userID, nil
 }
 
-func loginHandler(w http.ResponseWriter, r *http.Request) {
-	//if dumpvar {
-	//	_ = dumpRequest(os.Stdout, "login", r) // Ignore the error
-	//}
-	//// Set CORS headers
-	//// Set the "Access-Control-Allow-Origin" to allow all origins
-	////// If you want to allow just a specific domain, use that domain instead of "*"
-	////w.Header().Set("Access-Control-Allow-Origin", allowOrigin)
-	////// Allow methods
-	////w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
-	////// Allow headers
-	////w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
-	//store, err := session.Start(r.Context(), w, r)
-	//if err != nil {
-	//	http.Error(w, err.Error(), http.StatusInternalServerError)
-	//	return
-	//}
-	//
-	//if _, ok := store.Get("LoggedInUserID"); ok {
-	//	w.Header().Set("Location", "/main")
-	//
-	//	w.WriteHeader(http.StatusFound)
-	//	return
-	//}
-	//
-	//if r.Method == "POST" {
-	//	if r.Form == nil {
-	//		if err := r.ParseForm(); err != nil {
-	//			http.Error(w, err.Error(), http.StatusInternalServerError)
-	//			return
-	//		}
-	//
-	//	}
-	//
-	//	type submitRequest struct {
-	//		Username string `json:"username"`
-	//		Password string `json:"password"`
-	//	}
-	//	var formdata submitRequest
-	//	err := json.NewDecoder(r.Body).Decode(&formdata)
-	//	fmt.Println(formdata)
-	//	if err != nil {
-	//		http.Error(w, "StatusBadRequest", http.StatusBadRequest)
-	//	}
-	//	if !(validatePassword(userdb, formdata.Username, formdata.Password)) {
-	//		//outputHTML(w, r, "static/index.html")
-	//		w.WriteHeader(404)
-	//		//w.Write()
-	//		//w.WriteHeader(http.StatusUnauthorized)
-	//		return
-	//	}
-	//	//if !(validatePassword(r.Form.Get("username"), r.Form.Get("password"))) {
-	//	//	//outputHTML(w, r, "static/index.html")
-	//	//	w.WriteHeader(404)
-	//	//	//w.Write()
-	//	//	//w.WriteHeader(http.StatusUnauthorized)
-	//	//	return
-	//	//}
-
-	//
-	//	//if _, ok := store.Get("ReturnUri"); !ok {
-	//	//	w.Header().Set("Location", "/main")
-	//	//	w.WriteHeader(http.StatusFound)
-	//	//	return
-	//	//}
-	//	w.Header().Set("Location", "/auth")
-	//	w.WriteHeader(http.StatusFound)
-	//	return
-	//}
-	////outputHTML(w, r, "static/index.html")
-	//w.WriteHeader(404)
-}
-
-//	func defaultLoginHandler(w http.ResponseWriter, r *http.Request) {
-//		srv.ValidationTokenRequest(r)
-//	}
 func mainHandler(w http.ResponseWriter, r *http.Request) {
 	if dumpvar {
 		_ = dumpRequest(os.Stdout, "userAuthorizeHandler", r) // Ignore the error
@@ -602,10 +528,13 @@ func outputHTML(w http.ResponseWriter, req *http.Request, filename string) {
 	http.ServeContent(w, req, file.Name(), fi.ModTime(), file)
 }
 
-func validatePassword(u *validates.UserStore, username string, password string) bool {
+func validatePassword(u *store.AuthUserStore, username string, password string) bool {
 	_, login, err := u.Validates(username, password)
 	if err != nil {
 		return false
 	}
 	return login
 }
+
+//
+//fun validate
