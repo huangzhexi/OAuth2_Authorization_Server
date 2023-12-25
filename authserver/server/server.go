@@ -270,6 +270,71 @@ func main() {
 	//	e.Encode(data)
 	//})
 	//http.Handle("/static/")
+	http.HandleFunc("/modifyPassword", func(w http.ResponseWriter, r *http.Request) {
+
+		if dumpvar {
+			_ = dumpRequest(os.Stdout, "modify", r) // Ignore the error
+		}
+		sStore, err := session.Start(r.Context(), w, r)
+		if _, ok := sStore.Get("LoggedInUserID"); ok {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		type submitRequest struct {
+			Username    string `json:"username"`
+			Password    string `json:"password"`
+			NewPassword string `json:"newPassword"`
+		}
+		var formdata submitRequest
+		err = json.NewDecoder(r.Body).Decode(&formdata)
+		fmt.Println(formdata)
+		if err != nil {
+			http.Error(w, "StatusBadRequest", http.StatusBadRequest)
+		}
+		if !(validatePassword(userdb, formdata.Username, formdata.Password)) {
+			fmt.Println("password validation failed")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		err = userdb.ModifyPassword(formdata.Username, formdata.Password, formdata.NewPassword)
+		if err != nil {
+			//w.WriteHeader(http.StatusInternalServerError)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+
+	})
+	http.HandleFunc("/getUserInfo", func(w http.ResponseWriter, r *http.Request) {
+		if dumpvar {
+			_ = dumpRequest(os.Stdout, "getInfo", r) // Ignore the error
+		}
+		sStore, err := session.Start(r.Context(), w, r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		if _, ok := sStore.Get("LoggedInUserID"); ok {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		UsernameString, ok := sStore.Get("UsernameString")
+		if !ok {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		data := map[string]interface{}{
+			"UsernameString": UsernameString,
+		}
+		e := json.NewEncoder(w)
+		e.SetIndent("", "  ")
+		err = e.Encode(data)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
 	http.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
 		if dumpvar {
 			_ = dumpRequest(os.Stdout, "login", r) // Ignore the error
@@ -307,12 +372,24 @@ func main() {
 		fmt.Println(formdata)
 		if err != nil {
 			http.Error(w, "StatusBadRequest", http.StatusBadRequest)
-		}
-		if !(validatePassword(userdb, formdata.Username, formdata.Password)) {
-			fmt.Println("fail to login")
-			w.WriteHeader(404)
 			return
 		}
+		usernameString, isCorrect, err := userdb.Validates(formdata.Username, formdata.Password)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if !isCorrect {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		sStore.Set("UsernameString", usernameString)
+		//if isCorrect
+		//if !(validatePassword(userdb, formdata.Username, formdata.Password)) {
+		//	fmt.Println("fail to login")
+		//	w.WriteHeader(404)
+		//	return
+		//}
 		//if !(validatePassword(r.Form.Get("username"), r.Form.Get("password"))) {
 		//	//outputHTML(w, r, "static/index.html")
 		//	w.WriteHeader(404)
@@ -326,11 +403,11 @@ func main() {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 
-		//if _, ok := sStore.Get("ReturnUri"); !ok {
-		//	w.Header().Set("Location", "/main")
-		//	w.WriteHeader(http.StatusFound)
-		//	return
-		//}
+		if _, ok := sStore.Get("ReturnUri"); !ok {
+			w.Header().Set("Location", "/main")
+			w.WriteHeader(http.StatusFound)
+			return
+		}
 		w.Header().Set("Location", "/auth")
 		w.WriteHeader(http.StatusFound)
 		return
@@ -426,11 +503,11 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	//
 	//	}
 	//
-	//	type submitUser struct {
+	//	type submitRequest struct {
 	//		Username string `json:"username"`
 	//		Password string `json:"password"`
 	//	}
-	//	var formdata submitUser
+	//	var formdata submitRequest
 	//	err := json.NewDecoder(r.Body).Decode(&formdata)
 	//	fmt.Println(formdata)
 	//	if err != nil {
@@ -526,30 +603,9 @@ func outputHTML(w http.ResponseWriter, req *http.Request, filename string) {
 }
 
 func validatePassword(u *validates.UserStore, username string, password string) bool {
-	//fmt.Println("u:" + username + "p:" + password)
-	////var passUser struct {
-	////	username string
-	////	password string
-	////}
-	//type User struct {
-	//	Username string
-	//	Password string
-	//}
-	//
-	//var passUser = []User{
-	//	{"testAcc", "asdfkhjwe"},
-	//	{"testBcc", "sakfjewdf"},
-	//	{"testCcc", "sakjfhwee"},
-	//}
-	//
-	//for _, user := range passUser {
-	//	if username == user.Username && password == user.Password {
-	//		return true
-	//	}
-	//}
-	//if username == "admin" && password == "admin" {
-	//	return true
-	//}
-	return u.Validates(username, password)
-	//return false
+	_, login, err := u.Validates(username, password)
+	if err != nil {
+		return false
+	}
+	return login
 }

@@ -24,7 +24,7 @@ _testmain.go
 *.prof
 
 coverage.txt
-
+store/user.json
 # OSX
 *.DS_Store
 *.db

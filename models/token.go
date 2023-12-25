@@ -44,12 +44,12 @@ func (t *Token) SetClientID(clientID string) {
 	t.ClientID = clientID
 }
 
-// GetUserID the user id
+// GetUserID the User id
 func (t *Token) GetUserID() string {
 	return t.UserID
 }
 
-// SetUserID the user id
+// SetUserID the User id
 func (t *Token) SetUserID(userID string) {
 	t.UserID = userID
 }
