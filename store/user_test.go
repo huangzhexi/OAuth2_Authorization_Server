@@ -7,18 +7,32 @@ import (
 	"log"
 	"os"
 	"testing"
+
+	. "github.com/smartystreets/goconvey/convey"
 )
 
-func TestAuthUserStore(t *testing.T) {
-	_, err := NewDefaultAuthUserStore("user.json")
+func Test_AuthUserStore(t *testing.T) {
+	u, err := NewDefaultAuthUserStore("user.json")
+
 	if err != nil {
 		fmt.Println(err)
 	}
-	//err = u.Store("testAaaaa", "asfdlkqwheqwoeihr")
-	//good, _, err := u.Validates("testAaaaa", "asfdlkqwheqwoeihr")
-	//So(err, ShouldBeNil)
-	//So(good, ShouldBeTrue)
+	Convey("Test basic user store", t, func() {
+
+		err = u.Store("testAdsff", "wfewqwe")
+		_, _, err = u.Validates("testAdsff", "qwerweqr")
+		So(err, ShouldBeNil)
+	})
+
+	//Convey("Test basic user store", t, func() {
+	//
+	//	err = u.Store("testAdsff", "wfewqwe")
+	//	_, _, err = u.Validates("testAdsff", "qwerweqr")
+	//	So(err, ShouldBeNil)
+	//})
 }
+
+//func ()
 
 func example() {
 	type User struct {

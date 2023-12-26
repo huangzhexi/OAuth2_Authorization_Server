@@ -59,9 +59,11 @@ func main() {
 		log.Println("Dumping requests")
 	}
 	//userdb := validates.NewUserStore(userValidateDBAddr, userValidateDBName, userValidateDBPassword)
-	userStore, err := store.NewDefaultAuthUserStore("user.json")
+	userStore, err := store.NewDefaultAuthUserStore("D:\\CodingY3\\fallproject\\huang-oauth2\\oauth2\\authserver\\server\\user.json")
+
 	if err != nil {
 		fmt.Println(err)
+		return
 	}
 	//var allowOrigin string = "http://localhost:3000"
 	manager := manage.NewDefaultManager()
@@ -138,26 +140,31 @@ func main() {
 
 		store.Delete("ReturnUri")
 		store.Save()
+		store.Set("PostFlag", true)
+		// todo: fix the post bug.
+		type submitData struct {
+			PostFlag bool `json:"postFlag"`
+			//Password string `json:"password"`
+		}
+		var formdata submitData
+		err = json.NewDecoder(r.Body).Decode(&formdata)
+		if err == nil && formdata.PostFlag {
+			err = srv.HandleJsonAuthorizeRequest(w, r)
+			if err != nil {
+				fmt.Println(err.Error())
+				http.Error(w, err.Error(), http.StatusBadRequest)
+			}
+		}
 
 		err = srv.HandleAuthorizeRequest(w, r)
 		if err != nil {
 			fmt.Println(err.Error())
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		}
-		uri := w.Header().Get("Location")
-		fmt.Println("uri: " + uri)
-		if uri != "/login" {
-			var data map[string]string
-			data["Location"] = uri
-			w.WriteHeader(200)
-			e := json.NewEncoder(w)
-			e.SetIndent("", "  ")
-			e.Encode(data)
-		}
 	})
 	http.HandleFunc("/oauth/authorize", func(w http.ResponseWriter, r *http.Request) {
 		if dumpvar {
-			dumpRequest(os.Stdout, "authorize", r)
+			dumpRequest(os.Stdout, "oauth/authorize", r)
 		}
 		store, err := session.Start(r.Context(), w, r)
 		if err != nil {
@@ -315,15 +322,20 @@ func main() {
 			return
 		}
 
-		if _, ok := sStore.Get("LoggedInUserID"); ok {
+		userid, ok := sStore.Get("LoggedInUserID")
+		if !ok {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-
+		username := userid.(string)
 		UsernameString, ok := sStore.Get("UsernameString")
 		if !ok {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
+			UsernameString, err := userStore.FindName(username)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			sStore.Set("UsernameString", UsernameString)
 		}
 		data := map[string]interface{}{
 			"UsernameString": UsernameString,
@@ -415,6 +427,87 @@ func main() {
 		return
 	})
 
+	http.HandleFunc("/beginWebauthnRegister", func(w http.ResponseWriter, r *http.Request) {
+		if dumpvar {
+			_ = dumpRequest(os.Stdout, "beginWebauthnRegister", r) // Ignore the error
+		}
+
+		sessionStore, err := session.Start(r.Context(), w, r)
+		if err != nil {
+			return
+		}
+
+		uid, ok := sessionStore.Get("LoggedInUserID")
+		if !ok {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		username := uid.(string)
+		err = userStore.BeginRegistration(w, r, username)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+		err = sessionStore.Save()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
+
+	http.HandleFunc("/finishWebauthnRegister", func(w http.ResponseWriter, r *http.Request) {
+		if dumpvar {
+			_ = dumpRequest(os.Stdout, "finishWebauthnRegister", r) // Ignore the error
+		}
+
+		err := userStore.FinishRegistration(w, r)
+		if err != nil {
+			println()
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
+	http.HandleFunc("/beginWebauthnLogin", func(w http.ResponseWriter, r *http.Request) {
+		if dumpvar {
+			_ = dumpRequest(os.Stdout, "beginWebauthnLogin", r) // Ignore the error
+		}
+		type user struct {
+			Username string `json:"username"`
+		}
+		var formData user
+		sessionStore, err := session.Start(r.Context(), w, r)
+		sessionStore.Set("PendingWebauthUsername", formData.Username)
+		sessionStore.Save()
+		err = json.NewDecoder(r.Body).Decode(&formData)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		err = userStore.BeginLogin(w, r, formData.Username)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+	})
+	http.HandleFunc("/finishWebauthnLogin", func(w http.ResponseWriter, r *http.Request) {
+		if dumpvar {
+			_ = dumpRequest(os.Stdout, "finishWebauthnLogin", r) // Ignore the error
+		}
+
+		err := userStore.FinishLogin(w, r)
+		if err != nil {
+			println()
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+
+		//if _, ok := sessionStore.Get("ReturnUri"); !ok {
+		//	w.Header().Set("Location", "/main")
+		//	w.WriteHeader(http.StatusFound)
+		//	return
+		//}
+		//
+		//w.Header().Set("Location", "/auth")
+		//w.WriteHeader(http.StatusFound)
+		return
+	})
 	log.Printf("Server is running at %d port.\n", portvar)
 	log.Printf("Point your OAuth client Auth endpoint to %s:%d%s", "http://localhost", portvar, "/oauth/authorize")
 	log.Printf("Point your OAuth client Token endpoint to %s:%d%s", "http://localhost", portvar, "/oauth/token")
@@ -473,7 +566,7 @@ func userAuthorizeHandler(w http.ResponseWriter, r *http.Request) (userID string
 
 func mainHandler(w http.ResponseWriter, r *http.Request) {
 	if dumpvar {
-		_ = dumpRequest(os.Stdout, "userAuthorizeHandler", r) // Ignore the error
+		_ = dumpRequest(os.Stdout, "mainHandler", r) // Ignore the error
 	}
 	store, err := session.Start(r.Context(), w, r)
 	if err != nil {
@@ -493,7 +586,7 @@ func mainHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusFound)
 		return
 	}
-	outputHTML(w, r, "static/main.html")
+	w.WriteHeader(http.StatusOK)
 }
 
 func authHandler(w http.ResponseWriter, r *http.Request) {

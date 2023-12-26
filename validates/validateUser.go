@@ -41,7 +41,7 @@ func NewUserStore(hostName string, dbUsername string, dbPassword string) *UserSt
 	u.dbTableName = "oauthUser"
 	u.saltSize = 16
 
-	connStr := fmt.Sprintf("host= %s user=%s password=%s dbname=%s sslmode=%s",
+	connStr := fmt.Sprintf("host=%s user=%s password=%s dbname=%s sslmode=%s",
 		u.hostName, u.dbUsername, u.dbPassword, u.dbDatabaseName, u.dbSSLmode)
 	//connStr := "user= password= dbname= sslmode=require"
 	db, err := sql.Open("postgres", connStr)
