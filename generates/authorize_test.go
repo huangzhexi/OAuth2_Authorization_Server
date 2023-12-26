@@ -2,7 +2,9 @@ package generates_test
 
 import (
 	"context"
-	"github.com/huangzhexi/oauth2/example/server/static"
+	"github.com/huangzhexi/oauth2"
+
+	//"github.com/huangzhexi/oauth2/example/server/static"
 	"testing"
 	"time"
 

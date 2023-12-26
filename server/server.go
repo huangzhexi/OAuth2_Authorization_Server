@@ -89,7 +89,27 @@ func (s *Server) redirect(w http.ResponseWriter, req *AuthorizeRequest, data map
 	w.WriteHeader(302)
 	return nil
 }
+func (s *Server) jsonRedirect(w http.ResponseWriter, req *AuthorizeRequest, data map[string]interface{}) error {
+	uri, err := s.GetRedirectURI(req, data)
+	if err != nil {
+		return err
+	}
 
+	returnData := map[string]string{
+		"Location": uri,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	//w.Header().Set("Location", uri)
+	w.WriteHeader(http.StatusOK)
+	e := json.NewEncoder(w)
+	e.SetIndent("", "  ")
+	err = e.Encode(returnData)
+	fmt.Println(returnData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
 func (s *Server) tokenError(w http.ResponseWriter, err error) error {
 	data, statusCode, header := s.GetErrorData(err)
 	return s.token(w, data, header, statusCode)
@@ -265,6 +285,61 @@ func (s *Server) GetAuthorizeData(rt oauth2.ResponseType, ti oauth2.TokenInfo) m
 		}
 	}
 	return s.GetTokenData(ti)
+}
+
+// HandleJsonAuthorizeRequest the authorization request handling
+func (s *Server) HandleJsonAuthorizeRequest(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	req, err := s.ValidationAuthorizeRequest(r)
+	if err != nil {
+		return s.handleError(w, req, err)
+	}
+
+	// user authorization
+	userID, err := s.UserAuthorizationHandler(w, r)
+	if err != nil {
+		return s.handleError(w, req, err)
+	} else if userID == "" {
+		fmt.Println("U:" + userID)
+		return nil
+	}
+	req.UserID = userID
+
+	// specify the scope of authorization
+	if fn := s.AuthorizeScopeHandler; fn != nil {
+		scope, err := fn(w, r)
+		if err != nil {
+			return err
+		} else if scope != "" {
+			req.Scope = scope
+		}
+	}
+
+	// specify the expiration time of access token
+	if fn := s.AccessTokenExpHandler; fn != nil {
+		exp, err := fn(w, r)
+		if err != nil {
+			return err
+		}
+		req.AccessTokenExp = exp
+	}
+
+	ti, err := s.GetAuthorizeToken(ctx, req)
+	if err != nil {
+		return s.handleError(w, req, err)
+	}
+
+	// If the redirect URI is empty, the default domain provided by the client is used.
+	if req.RedirectURI == "" {
+		client, err := s.Manager.GetClient(ctx, req.ClientID)
+		if err != nil {
+			return err
+		}
+		req.RedirectURI = client.GetDomain()
+	}
+
+	return s.jsonRedirect(w, req, s.GetAuthorizeData(req.ResponseType, ti))
 }
 
 // HandleAuthorizeRequest the authorization request handling
